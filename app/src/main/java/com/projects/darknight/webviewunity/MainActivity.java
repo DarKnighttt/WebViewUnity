@@ -2,22 +2,27 @@ package com.projects.darknight.webviewunity;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.os.AsyncTask;
 import android.os.Build;
-import android.support.annotation.NonNull;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.Button;
-import android.widget.TextView;
-import android.widget.Toast;
 
+import com.darknight.rsb.UnityPlayerActivity;
 import com.projects.darknight.webviewunity.api.RetrofitClientInstance;
 import com.projects.darknight.webviewunity.api.ServerApi;
 import com.projects.darknight.webviewunity.pojo.ServerPermission;
+
+import java.io.IOException;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -26,70 +31,64 @@ import retrofit2.Retrofit;
 
 public class MainActivity extends AppCompatActivity {
 
-    TextView serverResponseText;
+    SharedPreferences preferences;
+    SharedPreferences.Editor editor;
+    final String GAME_PERMISSION = "start_game";
     WebView webView;
+    String serverResponse;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        serverResponseText = findViewById(R.id.serverResponseText);
+        preferences = getPreferences(MODE_PRIVATE);
+        editor = preferences.edit();
         webView = findViewById(R.id.webView);
 
-        Button askServer = findViewById(R.id.btnAskServer);
-        askServer.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                askServerPermission();
-            }
-        });
+        serverResponse = preferences.getString(GAME_PERMISSION, "0");
+        Log.d("Debugy", "Permission in pref = " + serverResponse);
+        if (serverResponse == null || serverResponse.equals("0")) {
+            Log.d("Debugy", "Go to ask permission");
+            Retrofit retrofit = RetrofitClientInstance.getRetrofitInstance();
+            ServerApi serverApi = retrofit.create(ServerApi.class);
+            Call<ServerPermission> call = serverApi.allowGame();
+            call.enqueue(new Callback<ServerPermission>() {
+                @Override
+                public void onResponse(@NonNull Call<ServerPermission> call, @NonNull Response<ServerPermission> response) {
+                    if (response.body() != null) {
+                        Log.d("Debugy", "Server response = " + response.body().getPermission().toString());
+                        editor.putString(GAME_PERMISSION, response.body().getPermission().toString());
+                        editor.apply();
+                        Log.d("Debugy", "Editor commit");
+                        chooseWay();
+                    } else {
+                        simpleDialogShow("Server error!");
+                    }
 
-        Button openWebView = findViewById(R.id.btnWebView);
-        openWebView.setOnClickListener(new View.OnClickListener() {
-            @SuppressLint("SetJavaScriptEnabled")
-            @Override
-            public void onClick(View v) {
-                webView.getSettings().setJavaScriptEnabled(true);
-                webView.setWebViewClient(new MyWebViewClient());
-                webView.loadUrl("https://html5test.com/");
-            }
-        });
-    }
-
-    private void askServerPermission(){
-        //Obtain an instance of Retrofit by calling the static method.
-        Retrofit retrofit = RetrofitClientInstance.getRetrofitInstance();
-        /*
-        The main purpose of Retrofit is to create HTTP calls from the Java interface based on the annotation associated with each method. This is achieved by just passing the interface class as parameter to the create method
-        */
-        ServerApi serverApi = retrofit.create(ServerApi.class);
-        /*
-        Invoke the method corresponding to the HTTP request which will return a Call object. This Call object will used to send the actual network request with the specified parameters
-        */
-        Call<ServerPermission> call = serverApi.allowGame();
-        /*
-        This is the line which actually sends a network request. Calling enqueue() executes a call asynchronously. It has two callback listeners which will invoked on the main thread
-        */
-        call.enqueue(new Callback<ServerPermission>() {
-            @Override
-            public void onResponse(@NonNull Call<ServerPermission> call, @NonNull Response<ServerPermission> response) {
-                /*This is the success callback. Though the response type is JSON, with Retrofit we get the response in the form of WResponse POJO class
-                 */
-                if (response.body() != null) {
-                    ServerPermission serverResponse = new ServerPermission(response.body().getName(), response.body().getPermission());
-                    serverResponseText.setText(serverResponse.toString());
                 }
-            }
-            @Override
-            public void onFailure(Call call, Throwable t) {
-                serverResponseText.setText("Something gone wrong");
-            }
-        });
+
+                @Override
+                public void onFailure(@NonNull Call call, @NonNull Throwable t) {
+                    simpleDialogShow("Network problems.\nPlease check your internet connection!");
+                }
+            });
+        } else {
+            chooseWay();
+        }
     }
 
-    private void startWithWebView(){
-
+    @SuppressLint("SetJavaScriptEnabled")
+    private void startWithWebView() {
+        if(checkInternetConnection()) {
+            webView.setVisibility(View.VISIBLE);
+            webView.getSettings().setJavaScriptEnabled(true);
+            webView.setWebViewClient(new MyWebViewClient());
+            webView.loadUrl("https://html5test.com/");
+        }else{
+            simpleDialogShow("Please check your internet connection!");
+        }
     }
 
     private class MyWebViewClient extends WebViewClient {
@@ -105,14 +104,67 @@ public class MainActivity extends AppCompatActivity {
             view.loadUrl(url);
             return true;
         }
+
     }
 
     @Override
     public void onBackPressed() {
-        if(webView.canGoBack()) {
+        if (webView.canGoBack()) {
             webView.goBack();
         } else {
             super.onBackPressed();
         }
+    }
+
+
+    public void simpleDialogShow(String message) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setMessage(message)
+                .setCancelable(false)
+                .setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                        finish();
+                    }
+                })
+                .create().show();
+    }
+
+    public void chooseWay() {
+        switch (preferences.getString(GAME_PERMISSION, "0")) {
+            case "false":
+                Log.d("Debugy", "WebView Start");
+                startWithWebView();
+                break;
+            case "true": {
+                Log.d("Debugy", "Game Start");
+                Intent intent = new Intent(MainActivity.this, UnityPlayerActivity.class);
+                startActivity(intent);
+                finish();
+                break;
+            }
+            default:
+                simpleDialogShow("Something gone wrong(");
+        }
+    }
+
+    public boolean checkInternetConnection() {
+        Runtime runtime = Runtime.getRuntime();
+        try {
+            Process ipProcess = runtime.exec("/system/bin/ping -c 1 8.8.8.8");
+            int exitValue = ipProcess.waitFor();
+            return (exitValue == 0);
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.d("Debugy", "OnResume");
     }
 }

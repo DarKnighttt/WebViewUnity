@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">WebViewUnity</string>
+    <string name="server_error">Server error</string>
+
 </resources>
