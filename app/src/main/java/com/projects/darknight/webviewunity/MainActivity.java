@@ -5,13 +5,11 @@ import android.annotation.TargetApi;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
@@ -48,9 +46,7 @@ public class MainActivity extends AppCompatActivity {
         webView = findViewById(R.id.webView);
 
         serverResponse = preferences.getString(GAME_PERMISSION, "0");
-        Log.d("Debugy", "Permission in pref = " + serverResponse);
-        if (serverResponse == null || serverResponse.equals("0")) {
-            Log.d("Debugy", "Go to ask permission");
+        if (serverResponse.equals("0")) {
             Retrofit retrofit = RetrofitClientInstance.getRetrofitInstance();
             ServerApi serverApi = retrofit.create(ServerApi.class);
             Call<ServerPermission> call = serverApi.allowGame();
@@ -58,10 +54,8 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onResponse(@NonNull Call<ServerPermission> call, @NonNull Response<ServerPermission> response) {
                     if (response.body() != null) {
-                        Log.d("Debugy", "Server response = " + response.body().getPermission().toString());
                         editor.putString(GAME_PERMISSION, response.body().getPermission().toString());
                         editor.apply();
-                        Log.d("Debugy", "Editor commit");
                         chooseWay();
                     } else {
                         simpleDialogShow("Server error!");
@@ -134,11 +128,9 @@ public class MainActivity extends AppCompatActivity {
     public void chooseWay() {
         switch (preferences.getString(GAME_PERMISSION, "0")) {
             case "false":
-                Log.d("Debugy", "WebView Start");
                 startWithWebView();
                 break;
             case "true": {
-                Log.d("Debugy", "Game Start");
                 Intent intent = new Intent(MainActivity.this, UnityPlayerActivity.class);
                 startActivity(intent);
                 finish();
@@ -160,11 +152,5 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return false;
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        Log.d("Debugy", "OnResume");
     }
 }
